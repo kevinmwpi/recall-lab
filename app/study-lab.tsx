@@ -17,11 +17,25 @@ import {
   Pause,
   Play,
   Plus,
+  RefreshCcw,
   RotateCcw,
   Sparkles,
   Target,
+  Trash2,
   X,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -133,7 +147,7 @@ function FamiliarityPill({ score }: { score: number | null }) {
   const label = category === "unseen" ? "Unseen" : category[0].toUpperCase() + category.slice(1);
   return (
     <span className={`familiarity-pill ${category}`}>
-      <span /> {label}{score === null ? "" : ` Â· ${score}`}
+      <span /> {label}{score === null ? "" : ` · ${score}`}
     </span>
   );
 }
@@ -271,6 +285,33 @@ export function StudyLab() {
     setView("library");
   }
 
+  function resetActiveSetProgress() {
+    if (!activeSet) return;
+    setSets((current) =>
+      current.map((set) =>
+        set.id !== activeSet.id
+          ? set
+          : {
+              ...set,
+              cards: set.cards.map((card) => ({
+                ...card,
+                score: null,
+                attempts: 0,
+                lastReviewed: undefined,
+              })),
+            },
+      ),
+    );
+  }
+
+  function deleteActiveSet() {
+    if (!activeSet) return;
+    const remainingSets = sets.filter((set) => set.id !== activeSet.id);
+    setSets(remainingSets);
+    setActiveSetId(remainingSets[0]?.id ?? null);
+    setView(remainingSets.length ? "library" : "import");
+  }
+
   function startStudy() {
     if (!activeSet?.cards.length) return;
     const preset = studyMode === "15-3" ? [15, 3] : studyMode === "25-5" ? [25, 5] : [45, 10];
@@ -384,7 +425,7 @@ export function StudyLab() {
   }
 
   if (!ready) {
-    return <main className="loading-screen"><Brain size={24} /><span>Loading study setsâ¦</span></main>;
+    return <main className="loading-screen"><Brain size={24} /><span>Loading study sets…</span></main>;
   }
 
   if (view === "session" && session && sessionSet) {
@@ -443,7 +484,7 @@ export function StudyLab() {
                   <small>Slow recall is scored lower automatically.</small>
                 </div>
                 <div className="recall-buttons">
-                  <Button variant="outline" onClick={() => rateRecall("missed")}><X size={15} /> Didnât know</Button>
+                  <Button variant="outline" onClick={() => rateRecall("missed")}><X size={15} /> Didn’t know</Button>
                   <Button variant="outline" onClick={() => rateRecall("shaky")}><RotateCcw size={15} /> Not consistent</Button>
                   <Button onClick={() => rateRecall("known")}><Check size={15} /> Knew it</Button>
                 </div>
@@ -493,7 +534,7 @@ export function StudyLab() {
             return (
               <button key={set.id} className={set.id === activeSetId && view === "library" ? "active" : ""} onClick={() => openSet(set.id)}>
                 <span className="set-icon"><Layers3 size={15} /></span>
-                <span className="set-copy"><strong>{set.name}</strong><small>{set.cards.length} cards Â· {stats.strong} strong</small></span>
+                <span className="set-copy"><strong>{set.name}</strong><small>{set.cards.length} cards · {stats.strong} strong</small></span>
                 <ChevronRight size={14} />
               </button>
             );
@@ -509,7 +550,51 @@ export function StudyLab() {
             <p>{view === "import" ? "Import" : "Study set"}</p>
             <h1>{view === "import" ? "Create a study set" : activeSet?.name ?? "Choose a set"}</h1>
           </div>
-          {view === "import" && sets.length > 0 && <Button variant="ghost" onClick={() => setView("library")}><ArrowLeft size={16} /> Cancel</Button>}
+          {view === "import" && sets.length > 0 ? (
+            <Button variant="ghost" onClick={() => setView("library")}><ArrowLeft size={16} /> Cancel</Button>
+          ) : activeSet ? (
+            <div className="set-actions">
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" disabled={activeStats.unseen === activeSet.cards.length}>
+                    <RefreshCcw size={15} /> Reset progress
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogMedia><RefreshCcw /></AlertDialogMedia>
+                    <AlertDialogTitle>Reset progress for {activeSet.name}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      The cards will stay in this set, but every familiarity score and attempt count will return to unseen. This cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Keep progress</AlertDialogCancel>
+                    <AlertDialogAction onClick={resetActiveSetProgress}>Reset progress</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="ghost" className="delete-set-button"><Trash2 size={15} /> Delete set</Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogMedia className="delete-dialog-icon"><Trash2 /></AlertDialogMedia>
+                    <AlertDialogTitle>Delete {activeSet.name}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This removes all {activeSet.cards.length} cards and their learning history from this browser. The set cannot be recovered.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Keep set</AlertDialogCancel>
+                    <AlertDialogAction variant="destructive" onClick={deleteActiveSet}>Delete set</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          ) : null}
         </header>
 
         {view === "import" ? (
@@ -551,7 +636,7 @@ export function StudyLab() {
                 </fieldset>
               </div>
               <div className="import-actions">
-                <div><strong>{parsedImport.cards.length} valid cards</strong>{parsedImport.invalid > 0 && <span> Â· {parsedImport.invalid} skipped row{parsedImport.invalid === 1 ? "" : "s"}</span>}</div>
+                <div><strong>{parsedImport.cards.length} valid cards</strong>{parsedImport.invalid > 0 && <span> · {parsedImport.invalid} skipped row{parsedImport.invalid === 1 ? "" : "s"}</span>}</div>
                 <Button onClick={importSet} disabled={!setName.trim() || !parsedImport.cards.length}><Import size={16} /> Import set</Button>
               </div>
             </section>
@@ -594,15 +679,15 @@ export function StudyLab() {
                   <span className="mode-icon"><BookOpen size={19} /></span>
                   <span><strong>Free study</strong><small>No timer or interruptions. Stop when you choose.</small></span>
                 </label>
-                <label className={studyMode === "15-3" ? "selected" : ""} htmlFor="mode-15"><RadioGroupItem value="15-3" id="mode-15" /><span className="mode-icon"><Clock3 size={19} /></span><span><strong>15 min focus Â· 3 min break</strong><small>A light sprint for quick review.</small></span></label>
-                <label className={studyMode === "25-5" ? "selected" : ""} htmlFor="mode-25"><RadioGroupItem value="25-5" id="mode-25" /><span className="mode-icon"><Clock3 size={19} /></span><span><strong>25 min focus Â· 5 min break</strong><small>The classic Pomodoro split.</small></span></label>
-                <label className={studyMode === "45-10" ? "selected" : ""} htmlFor="mode-45"><RadioGroupItem value="45-10" id="mode-45" /><span className="mode-icon"><Target size={19} /></span><span><strong>45 min focus Â· 10 min break</strong><small>For deeper, sustained practice.</small></span></label>
+                <label className={studyMode === "15-3" ? "selected" : ""} htmlFor="mode-15"><RadioGroupItem value="15-3" id="mode-15" /><span className="mode-icon"><Clock3 size={19} /></span><span><strong>15 min focus · 3 min break</strong><small>A light sprint for quick review.</small></span></label>
+                <label className={studyMode === "25-5" ? "selected" : ""} htmlFor="mode-25"><RadioGroupItem value="25-5" id="mode-25" /><span className="mode-icon"><Clock3 size={19} /></span><span><strong>25 min focus · 5 min break</strong><small>The classic Pomodoro split.</small></span></label>
+                <label className={studyMode === "45-10" ? "selected" : ""} htmlFor="mode-45"><RadioGroupItem value="45-10" id="mode-45" /><span className="mode-icon"><Target size={19} /></span><span><strong>45 min focus · 10 min break</strong><small>For deeper, sustained practice.</small></span></label>
               </RadioGroup>
               <Button className="start-session-button" onClick={startStudy}><Play size={16} /> Begin session</Button>
             </section>
 
             <section className="card-progress-list">
-              <div className="progress-list-heading"><div><span className="eyebrow"><BarChart3 size={13} /> Card progress</span><h2>Strength by note</h2></div><span>Rolling score Â· 0â100</span></div>
+              <div className="progress-list-heading"><div><span className="eyebrow"><BarChart3 size={13} /> Card progress</span><h2>Strength by note</h2></div><span>Rolling score · 0–100</span></div>
               <div className="progress-table">
                 <div className="progress-table-header"><span>Card</span><span>Familiarity</span><span>Attempts</span></div>
                 {activeSet.cards.map((card) => (
