@@ -94,6 +94,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .workspace-main { min-width: 0; padding: 0 42px 60px; }
 .workspace-header { min-height: 114px; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-bottom: 1px solid var(--line); }
 .workspace-header p { margin: 0 0 6px; color: var(--violet); font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }.workspace-header h1 { margin: 0; font-size: 25px; letter-spacing: -.035em; }.mobile-brand { display: none; }
+.set-actions { display: flex; align-items: center; gap: 7px; }.set-actions button { font-size: 9px; font-weight: 700; }.delete-set-button { color: #a44b53; }.delete-set-button:hover { color: #a13f48; background: var(--red-soft); }.delete-dialog-icon { color: #a6454d; background: var(--red-soft); }
 
 .import-workspace { padding-top: 30px; display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, .65fr); gap: 22px; align-items: start; }
 .import-panel, .import-preview, .knowledge-overview, .session-setup, .card-progress-list { background: var(--surface); border: 1px solid var(--line); border-radius: 13px; box-shadow: 0 2px 3px rgba(26,25,36,.025); }
@@ -132,6 +133,7 @@ button { -webkit-tap-highlight-color: transparent; }
 @media (max-width: 740px) {
   .workspace-shell { display: block; }.set-sidebar { min-height: auto; position: static; padding: 14px; }.workspace-brand, .sidebar-storage, .sidebar-label { display: none; }.import-set-button { width: auto; }.set-sidebar { flex-direction: row; gap: 9px; overflow-x: auto; }.set-list { flex-direction: row; }.set-list button { width: 190px; flex: 0 0 auto; }.empty-set-list { display: none; }
   .workspace-main { padding: 0 16px 40px; }.workspace-header { min-height: 92px; }.workspace-header p { display: none; }.workspace-header h1 { font-size: 21px; }.mobile-brand { margin-bottom: 6px; display: flex; align-items: center; gap: 6px; color: var(--violet); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+  .set-actions { align-items: stretch; flex-direction: column; gap: 2px; }.set-actions button { height: 30px; justify-content: flex-start; padding-inline: 8px; }
   .import-workspace, .set-dashboard { padding-top: 17px; gap: 14px; }.import-panel { padding: 18px; }.separator-grid { grid-template-columns: 1fr; gap: 22px; }.separator-options { gap: 13px; }.import-actions { align-items: flex-start; flex-direction: column; }.import-actions button { width: 100%; }.card-data-input { min-height: 210px; }
   .overview-heading { display: block; }.overview-heading > p { margin-top: 10px; }.stat-grid > div { padding-inline: 8px; }.stat-grid strong { font-size: 22px; }.status-dot { display: none; }.knowledge-overview, .session-setup { padding: 19px; }
   .progress-table-header { display: none; }.progress-row { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }.attempt-count { display: none; }.familiarity-pill { min-width: auto; }
