@@ -124,6 +124,60 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .summary-screen { min-height: 100vh; padding: 40px 22px; display: grid; place-items: center; background: var(--sidebar); }.summary-card { width: min(100%, 760px); padding: 47px; color: white; text-align: center; border: 1px solid rgba(255,255,255,.1); border-radius: 17px; background: #292936; box-shadow: 0 30px 80px rgba(0,0,0,.18); }.summary-icon { width: 50px; height: 50px; margin: 0 auto 22px; display: grid; place-items: center; color: #c9c5ff; border-radius: 50%; background: rgba(99,91,219,.22); }.summary-card h1 { margin-top: 13px; }.summary-card > p { max-width: 570px; margin: 0 auto; color: #aaa9b8; font-size: 11px; line-height: 1.7; }.summary-metrics { margin: 33px 0; display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid rgba(255,255,255,.1); border-bottom: 1px solid rgba(255,255,255,.1); }.summary-metrics div { padding: 22px; display: flex; flex-direction: column; border-right: 1px solid rgba(255,255,255,.1); }.summary-metrics div:last-child { border: 0; }.summary-metrics strong { font-size: 29px; }.summary-metrics span { margin-top: 3px; color: #c6c5d0; font-size: 9px; }.summary-metrics small { margin-top: 7px; color: #777684; font-size: 8px; }.summary-actions { display: flex; justify-content: center; gap: 8px; }.summary-actions button { font-weight: 700; }
 
+/* A modest readability lift for supporting copy and study controls. */
+.workspace-brand small,
+.sidebar-storage strong,
+.sidebar-label,
+.set-copy small,
+.workspace-header p,
+.set-actions button,
+.field-heading span,
+.separator-options label,
+.preview-heading,
+.import-preview article > span,
+.import-preview article p,
+.preview-empty p,
+.preview-more,
+.eyebrow,
+.stat-grid p,
+.progress-list-heading > span,
+.progress-table-header,
+.familiarity-pill,
+.session-identity small,
+.session-status > span,
+.session-status button,
+.card-stage-meta > span:first-child,
+.card-face-label,
+.reveal-instruction,
+.recall-controls small,
+.recall-buttons button,
+.speed-note,
+.session-kicker,
+.summary-metrics span,
+.summary-metrics small { font-size: 11px; }
+
+.set-copy strong,
+.sidebar-storage p,
+.field-group > label,
+.field-heading label,
+.separator-grid legend,
+.import-actions div,
+.import-preview article strong,
+.overview-heading > p,
+.mode-list strong,
+.progress-row strong,
+.progress-row p,
+.attempt-count,
+.session-identity span,
+.recall-controls span { font-size: 12px; }
+
+.mode-list small,
+.speed-note,
+.summary-metrics small { font-size: 10px; }
+
+.card-data-input { font-size: 14px; }
+.summary-card > p { font-size: 13px; }
+
 @media (max-width: 1050px) {
   .workspace-shell { grid-template-columns: 238px minmax(0, 1fr); }.workspace-main { padding-inline: 28px; }
   .import-workspace { grid-template-columns: 1fr; }.import-preview { min-height: 0; }.preview-empty { min-height: 230px; }
@@ -132,7 +186,7 @@ button { -webkit-tap-highlight-color: transparent; }
 
 @media (max-width: 740px) {
   .workspace-shell { display: block; }.set-sidebar { min-height: auto; position: static; padding: 14px; }.workspace-brand, .sidebar-storage, .sidebar-label { display: none; }.import-set-button { width: auto; }.set-sidebar { flex-direction: row; gap: 9px; overflow-x: auto; }.set-list { flex-direction: row; }.set-list button { width: 190px; flex: 0 0 auto; }.empty-set-list { display: none; }
-  .workspace-main { padding: 0 16px 40px; }.workspace-header { min-height: 92px; }.workspace-header p { display: none; }.workspace-header h1 { font-size: 21px; }.mobile-brand { margin-bottom: 6px; display: flex; align-items: center; gap: 6px; color: var(--violet); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+  .workspace-main { padding: 0 16px 40px; }.workspace-header { min-height: 92px; }.workspace-header p { display: none; }.workspace-header h1 { font-size: 21px; }.mobile-brand { margin-bottom: 6px; display: flex; align-items: center; gap: 6px; color: var(--violet); font-size: 11px; font-weight: 800; text-transform: uppercase; }
   .set-actions { align-items: stretch; flex-direction: column; gap: 2px; }.set-actions button { height: 30px; justify-content: flex-start; padding-inline: 8px; }
   .import-workspace, .set-dashboard { padding-top: 17px; gap: 14px; }.import-panel { padding: 18px; }.separator-grid { grid-template-columns: 1fr; gap: 22px; }.separator-options { gap: 13px; }.import-actions { align-items: flex-start; flex-direction: column; }.import-actions button { width: 100%; }.card-data-input { min-height: 210px; }
   .overview-heading { display: block; }.overview-heading > p { margin-top: 10px; }.stat-grid > div { padding-inline: 8px; }.stat-grid strong { font-size: 22px; }.status-dot { display: none; }.knowledge-overview, .session-setup { padding: 19px; }
