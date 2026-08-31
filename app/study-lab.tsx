@@ -37,6 +37,15 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
@@ -183,6 +192,13 @@ export function StudyLab() {
   const [customTerm, setCustomTerm] = useState("");
   const [customCard, setCustomCard] = useState("");
 
+  const [addCardsOpen, setAddCardsOpen] = useState(false);
+  const [additionalRawCards, setAdditionalRawCards] = useState("");
+  const [additionalTermMode, setAdditionalTermMode] = useState("tab");
+  const [additionalCardMode, setAdditionalCardMode] = useState("newline");
+  const [additionalCustomTerm, setAdditionalCustomTerm] = useState("");
+  const [additionalCustomCard, setAdditionalCustomCard] = useState("");
+
   const [studyMode, setStudyMode] = useState("free");
   const [session, setSession] = useState<Session | null>(null);
   const [revealed, setRevealed] = useState(false);
@@ -250,6 +266,22 @@ export function StudyLab() {
     () => parseCards(rawCards, termMode, cardMode, customTerm, customCard),
     [rawCards, termMode, cardMode, customTerm, customCard],
   );
+  const parsedAddition = useMemo(
+    () => parseCards(
+      additionalRawCards,
+      additionalTermMode,
+      additionalCardMode,
+      additionalCustomTerm,
+      additionalCustomCard,
+    ),
+    [
+      additionalRawCards,
+      additionalTermMode,
+      additionalCardMode,
+      additionalCustomTerm,
+      additionalCustomCard,
+    ],
+  );
 
   const sessionSet = sets.find((set) => set.id === session?.setId);
   const currentCardId = session?.cardIds[session.index % Math.max(1, session.cardIds.length)];
@@ -310,6 +342,39 @@ export function StudyLab() {
     setSets(remainingSets);
     setActiveSetId(remainingSets[0]?.id ?? null);
     setView(remainingSets.length ? "library" : "import");
+  }
+
+  function addCardsToActiveSet() {
+    if (!activeSet || !parsedAddition.cards.length) return;
+    const addedCards: StudyCard[] = parsedAddition.cards.map((card) => ({
+      id: makeId(),
+      front: card.front,
+      back: card.back,
+      score: null,
+      attempts: 0,
+    }));
+    setSets((current) =>
+      current.map((set) =>
+        set.id === activeSet.id ? { ...set, cards: [...set.cards, ...addedCards] } : set,
+      ),
+    );
+    setAdditionalRawCards("");
+    setAdditionalTermMode("tab");
+    setAdditionalCardMode("newline");
+    setAdditionalCustomTerm("");
+    setAdditionalCustomCard("");
+    setAddCardsOpen(false);
+  }
+
+  function removeCardFromActiveSet(cardId: string) {
+    if (!activeSet) return;
+    setSets((current) =>
+      current.map((set) =>
+        set.id === activeSet.id
+          ? { ...set, cards: set.cards.filter((card) => card.id !== cardId) }
+          : set,
+      ),
+    );
   }
 
   function startStudy() {
@@ -554,6 +619,66 @@ export function StudyLab() {
             <Button variant="ghost" onClick={() => setView("library")}><ArrowLeft size={16} /> Cancel</Button>
           ) : activeSet ? (
             <div className="set-actions">
+              <Dialog open={addCardsOpen} onOpenChange={setAddCardsOpen}>
+                <DialogTrigger asChild>
+                  <Button><Plus size={15} /> Add cards</Button>
+                </DialogTrigger>
+                <DialogContent className="add-cards-dialog">
+                  <DialogHeader>
+                    <DialogTitle>Add formatted cards to {activeSet.name}</DialogTitle>
+                    <DialogDescription>
+                      Paste multiple notes at once. Choose how each term, definition, and card is separated before adding them to this set.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="add-cards-form">
+                    <div className="field-group">
+                      <div className="field-heading"><label htmlFor="additional-card-data">Paste your cards</label><span>New cards begin as unseen</span></div>
+                      <Textarea
+                        id="additional-card-data"
+                        value={additionalRawCards}
+                        onChange={(event) => setAdditionalRawCards(event.target.value)}
+                        placeholder={"interface\tcontract implemented by a class\ncomposition\thas-a relationship"}
+                        className="card-data-input add-card-data-input"
+                      />
+                    </div>
+
+                    <div className="separator-grid add-separator-grid">
+                      <fieldset>
+                        <legend>Between term and definition</legend>
+                        <RadioGroup value={additionalTermMode} onValueChange={setAdditionalTermMode} className="separator-options">
+                          <label htmlFor="additional-term-tab"><RadioGroupItem value="tab" id="additional-term-tab" /> Tab</label>
+                          <label htmlFor="additional-term-comma"><RadioGroupItem value="comma" id="additional-term-comma" /> Comma</label>
+                          <label htmlFor="additional-term-custom"><RadioGroupItem value="custom" id="additional-term-custom" /> Custom</label>
+                        </RadioGroup>
+                        <Input aria-label="Custom term separator for added cards" value={additionalCustomTerm} onChange={(event) => setAdditionalCustomTerm(event.target.value)} placeholder="e.g. :: or \\t" disabled={additionalTermMode !== "custom"} />
+                      </fieldset>
+                      <fieldset>
+                        <legend>Between cards</legend>
+                        <RadioGroup value={additionalCardMode} onValueChange={setAdditionalCardMode} className="separator-options">
+                          <label htmlFor="additional-card-newline"><RadioGroupItem value="newline" id="additional-card-newline" /> New line</label>
+                          <label htmlFor="additional-card-semicolon"><RadioGroupItem value="semicolon" id="additional-card-semicolon" /> Semicolon</label>
+                          <label htmlFor="additional-card-custom"><RadioGroupItem value="custom" id="additional-card-custom" /> Custom</label>
+                        </RadioGroup>
+                        <Input aria-label="Custom card separator for added cards" value={additionalCustomCard} onChange={(event) => setAdditionalCustomCard(event.target.value)} placeholder="e.g. || or \\n" disabled={additionalCardMode !== "custom"} />
+                      </fieldset>
+                    </div>
+
+                    <div className="add-cards-validation" aria-live="polite">
+                      <strong>{parsedAddition.cards.length} valid card{parsedAddition.cards.length === 1 ? "" : "s"}</strong>
+                      {parsedAddition.invalid > 0 && <span> · {parsedAddition.invalid} skipped row{parsedAddition.invalid === 1 ? "" : "s"}</span>}
+                    </div>
+                  </div>
+
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setAddCardsOpen(false)}>Cancel</Button>
+                    <Button onClick={addCardsToActiveSet} disabled={!parsedAddition.cards.length}>
+                      <Plus size={16} /> Add {parsedAddition.cards.length || ""} card{parsedAddition.cards.length === 1 ? "" : "s"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline" disabled={activeStats.unseen === activeSet.cards.length}>
@@ -683,20 +808,47 @@ export function StudyLab() {
                 <label className={studyMode === "25-5" ? "selected" : ""} htmlFor="mode-25"><RadioGroupItem value="25-5" id="mode-25" /><span className="mode-icon"><Clock3 size={19} /></span><span><strong>25 min focus · 5 min break</strong><small>The classic Pomodoro split.</small></span></label>
                 <label className={studyMode === "45-10" ? "selected" : ""} htmlFor="mode-45"><RadioGroupItem value="45-10" id="mode-45" /><span className="mode-icon"><Target size={19} /></span><span><strong>45 min focus · 10 min break</strong><small>For deeper, sustained practice.</small></span></label>
               </RadioGroup>
-              <Button className="start-session-button" onClick={startStudy}><Play size={16} /> Begin session</Button>
+              <Button className="start-session-button" onClick={startStudy} disabled={!activeSet.cards.length}><Play size={16} /> Begin session</Button>
             </section>
 
             <section className="card-progress-list">
               <div className="progress-list-heading"><div><span className="eyebrow"><BarChart3 size={13} /> Card progress</span><h2>Strength by note</h2></div><span>Rolling score · 0–100</span></div>
               <div className="progress-table">
-                <div className="progress-table-header"><span>Card</span><span>Familiarity</span><span>Attempts</span></div>
-                {activeSet.cards.map((card) => (
+                <div className="progress-table-header"><span>Card</span><span>Familiarity</span><span>Attempts</span><span className="sr-only">Actions</span></div>
+                {activeSet.cards.length ? activeSet.cards.map((card) => (
                   <div className="progress-row" key={card.id}>
                     <div><strong>{card.front}</strong><p>{card.back}</p></div>
                     <FamiliarityPill score={card.score} />
                     <span className="attempt-count">{card.attempts}</span>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon" className="card-delete-button" aria-label={`Remove ${card.front} from this set`}>
+                          <Trash2 size={15} />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogMedia className="delete-dialog-icon"><Trash2 /></AlertDialogMedia>
+                          <AlertDialogTitle>Remove this card?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            “{card.front}” and its learning history will be permanently removed from {activeSet.name}. The rest of the set will stay unchanged.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Keep card</AlertDialogCancel>
+                          <AlertDialogAction variant="destructive" onClick={() => removeCardFromActiveSet(card.id)}>Remove card</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
-                ))}
+                )) : (
+                  <div className="empty-card-list">
+                    <Layers3 size={24} />
+                    <strong>This set has no cards</strong>
+                    <p>Add formatted cards to start studying again.</p>
+                    <Button onClick={() => setAddCardsOpen(true)}><Plus size={16} /> Add cards</Button>
+                  </div>
+                )}
               </div>
             </section>
           </div>
