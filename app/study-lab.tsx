@@ -437,11 +437,11 @@ export function StudyLab() {
     setView("session");
   }
 
-  function revealAnswer() {
-    if (!revealed) {
+  function toggleCardFace() {
+    if (!revealed && recallMs === null) {
       setRecallMs(Date.now() - shownAt);
-      setRevealed(true);
     }
+    setRevealed((current) => !current);
   }
 
   function rateRecall(rating: RecallRating) {
@@ -579,10 +579,17 @@ export function StudyLab() {
               <span>Card {(session.index % session.cardIds.length) + 1} of {session.cardIds.length}</span>
               <FamiliarityPill score={currentCard.score} />
             </div>
-            <button className={`study-card ${revealed ? "revealed" : ""}`} onClick={revealAnswer} disabled={revealed}>
+            <button
+              className={`study-card ${revealed ? "revealed" : ""}`}
+              onClick={toggleCardFace}
+              aria-label={revealed ? "Show the prompt again" : "Show the answer"}
+              aria-pressed={revealed}
+            >
               <span className="card-face-label">{revealed ? "Answer" : "Prompt"}</span>
               <h1>{revealed ? currentCard.back : currentCard.front}</h1>
-              {!revealed && <span className="reveal-instruction">Recall it first, then reveal <ChevronRight size={16} /></span>}
+              <span className="reveal-instruction">
+                {revealed ? <>Return to prompt <RotateCcw size={15} /></> : <>Recall it first, then reveal <ChevronRight size={16} /></>}
+              </span>
             </button>
             {revealed ? (
               <div className="recall-controls">
@@ -597,7 +604,11 @@ export function StudyLab() {
                 </div>
               </div>
             ) : (
-              <p className="speed-note">Familiarity uses both your rating and retrieval speed. Confident recall under 6 seconds earns the strongest signal; over 15 seconds is treated as unfamiliar.</p>
+              <p className="speed-note">
+                {recallMs === null
+                  ? "Familiarity uses both your rating and retrieval speed. Confident recall under 6 seconds earns the strongest signal; over 15 seconds is treated as unfamiliar."
+                  : "Answer hidden. Click the card again to view it and rate your recall."}
+              </p>
             )}
           </section>
         ) : null}
