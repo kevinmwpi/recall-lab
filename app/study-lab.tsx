@@ -14,11 +14,13 @@ import {
   Coffee,
   Import,
   Layers3,
+  ListOrdered,
   Pause,
   Play,
   Plus,
   RefreshCcw,
   RotateCcw,
+  Shuffle,
   Sparkles,
   Target,
   Trash2,
@@ -48,6 +50,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 type Familiarity = "unseen" | "unfamiliar" | "inconsistent" | "strong";
@@ -68,6 +77,8 @@ type StudySet = {
   createdAt: number;
 };
 
+type StudyOrder = "ordered" | "shuffled" | "blocks";
+
 type Session = {
   setId: string;
   mode: "free" | "pomodoro";
@@ -76,6 +87,7 @@ type Session = {
   phase: "focus" | "break";
   secondsLeft: number;
   running: boolean;
+  orderMode: StudyOrder;
   cardIds: string[];
   index: number;
   totalReviews: number;
@@ -151,6 +163,26 @@ function parseCards(
   return { cards, invalid };
 }
 
+function shuffleCopy<T>(items: T[]) {
+  const shuffled = [...items];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
+function arrangeCardIds(cardIds: string[], orderMode: StudyOrder) {
+  if (orderMode === "ordered") return [...cardIds];
+  if (orderMode === "shuffled") return shuffleCopy(cardIds);
+
+  const blocks: string[][] = [];
+  for (let index = 0; index < cardIds.length; index += 3) {
+    blocks.push(cardIds.slice(index, index + 3));
+  }
+  return shuffleCopy(blocks).flat();
+}
+
 function FamiliarityPill({ score }: { score: number | null }) {
   const category = categoryFor(score);
   const label = category === "unseen" ? "Unseen" : category[0].toUpperCase() + category.slice(1);
@@ -200,6 +232,7 @@ export function StudyLab() {
   const [additionalCustomCard, setAdditionalCustomCard] = useState("");
 
   const [studyMode, setStudyMode] = useState("free");
+  const [studyOrder, setStudyOrder] = useState<StudyOrder>("ordered");
   const [session, setSession] = useState<Session | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [shownAt, setShownAt] = useState(Date.now());
@@ -389,7 +422,8 @@ export function StudyLab() {
       phase: "focus",
       secondsLeft: mode === "free" ? 0 : preset[0] * 60,
       running: mode === "pomodoro",
-      cardIds: activeSet.cards.map((card) => card.id),
+      orderMode: studyOrder,
+      cardIds: arrangeCardIds(activeSet.cards.map((card) => card.id), studyOrder),
       index: 0,
       totalReviews: 0,
       blockReviews: 0,
@@ -438,16 +472,19 @@ export function StudyLab() {
             },
       ),
     );
-    setSession((current) =>
-      current
-        ? {
-            ...current,
-            index: current.index + 1,
-            totalReviews: current.totalReviews + 1,
-            blockReviews: current.blockReviews + 1,
-          }
-        : current,
-    );
+    setSession((current) => {
+      if (!current) return current;
+      const nextIndex = current.index + 1;
+      const finishedPass = nextIndex >= current.cardIds.length;
+      const sourceIds = sessionSet?.cards.map((card) => card.id) ?? current.cardIds;
+      return {
+        ...current,
+        cardIds: finishedPass ? arrangeCardIds(sourceIds, current.orderMode) : current.cardIds,
+        index: finishedPass ? 0 : nextIndex,
+        totalReviews: current.totalReviews + 1,
+        blockReviews: current.blockReviews + 1,
+      };
+    });
     setRevealed(false);
     setRecallMs(null);
     setShownAt(Date.now());
@@ -499,7 +536,12 @@ export function StudyLab() {
         <header className="session-header">
           <div className="session-identity">
             <span className="brand-mark"><Brain size={16} /></span>
-            <div><span>{sessionSet.name}</span><small>{session.mode === "free" ? "Free study" : `Focus block ${session.cycle}`}</small></div>
+            <div>
+              <span>{sessionSet.name}</span>
+              <small>
+                {session.mode === "free" ? "Free study" : `Focus block ${session.cycle}`} · {session.orderMode === "ordered" ? "In order" : session.orderMode === "shuffled" ? "Fully shuffled" : "Shuffled blocks"}
+              </small>
+            </div>
           </div>
           <div className="session-status">
             <span>{session.totalReviews} reviewed</span>
@@ -808,6 +850,30 @@ export function StudyLab() {
                 <label className={studyMode === "25-5" ? "selected" : ""} htmlFor="mode-25"><RadioGroupItem value="25-5" id="mode-25" /><span className="mode-icon"><Clock3 size={19} /></span><span><strong>25 min focus · 5 min break</strong><small>The classic Pomodoro split.</small></span></label>
                 <label className={studyMode === "45-10" ? "selected" : ""} htmlFor="mode-45"><RadioGroupItem value="45-10" id="mode-45" /><span className="mode-icon"><Target size={19} /></span><span><strong>45 min focus · 10 min break</strong><small>For deeper, sustained practice.</small></span></label>
               </RadioGroup>
+              <div className="order-control">
+                <div className="order-control-heading">
+                  <label htmlFor="study-order">Card order</label>
+                  <span>Refreshes after each complete pass</span>
+                </div>
+                <Select value={studyOrder} onValueChange={(value) => setStudyOrder(value as StudyOrder)}>
+                  <SelectTrigger id="study-order" className="order-select" aria-label="Choose card order">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ordered">In set order</SelectItem>
+                    <SelectItem value="shuffled">Shuffle every card</SelectItem>
+                    <SelectItem value="blocks">Shuffle 3-card blocks</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p>
+                  {studyOrder === "ordered" ? <ListOrdered size={15} /> : studyOrder === "shuffled" ? <Shuffle size={15} /> : <Layers3 size={15} />}
+                  {studyOrder === "ordered"
+                    ? "Preserves neighboring patterns and the original sequence."
+                    : studyOrder === "shuffled"
+                      ? "Randomizes every card to reduce neighboring cues."
+                      : "Keeps each group of three together, then randomizes the block order."}
+                </p>
+              </div>
               <Button className="start-session-button" onClick={startStudy} disabled={!activeSet.cards.length}><Play size={16} /> Begin session</Button>
             </section>
 
