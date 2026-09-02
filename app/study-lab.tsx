@@ -15,6 +15,7 @@ import {
   Import,
   Layers3,
   ListOrdered,
+  Moon,
   Pause,
   Play,
   Plus,
@@ -22,6 +23,7 @@ import {
   RotateCcw,
   Shuffle,
   Sparkles,
+  Sun,
   Target,
   Trash2,
   X,
@@ -96,8 +98,10 @@ type Session = {
 };
 
 type RecallRating = "missed" | "shaky" | "known";
+type ThemeMode = "light" | "dark";
 
 const STORAGE_KEY = "recall-lab-study-sets-v2";
+const THEME_KEY = "recall-lab-theme-v1";
 const STRONG_THRESHOLD = 75;
 const INCONSISTENT_THRESHOLD = 40;
 
@@ -211,11 +215,37 @@ function TimerRing({ session, compact = false }: { session: Session; compact?: b
   );
 }
 
+function ThemeToggle({
+  theme,
+  onToggle,
+  className = "",
+}: {
+  theme: ThemeMode;
+  onToggle: () => void;
+  className?: string;
+}) {
+  const nextTheme = theme === "light" ? "dark" : "light";
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      className={`theme-toggle ${className}`.trim()}
+      onClick={onToggle}
+      aria-label={`Switch to ${nextTheme} mode`}
+      title={`Switch to ${nextTheme} mode`}
+    >
+      {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
+    </Button>
+  );
+}
+
 export function StudyLab() {
   const [sets, setSets] = useState<StudySet[]>([]);
   const [activeSetId, setActiveSetId] = useState<string | null>(null);
   const [view, setView] = useState<"library" | "import" | "session" | "summary">("library");
   const [ready, setReady] = useState(false);
+  const [theme, setTheme] = useState<ThemeMode>("light");
 
   const [setName, setSetName] = useState("");
   const [rawCards, setRawCards] = useState("");
@@ -240,6 +270,16 @@ export function StudyLab() {
   const [sessionStartStats, setSessionStartStats] = useState<ReturnType<typeof statsFor> | null>(null);
 
   useEffect(() => {
+    let initialTheme: ThemeMode = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    try {
+      const savedTheme = window.localStorage.getItem(THEME_KEY);
+      if (savedTheme === "light" || savedTheme === "dark") initialTheme = savedTheme;
+    } catch {
+      // Keep the system preference when browser storage is unavailable.
+    }
+    document.documentElement.dataset.theme = initialTheme;
+    setTheme(initialTheme);
+
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
       if (saved) {
@@ -262,6 +302,16 @@ export function StudyLab() {
   useEffect(() => {
     if (ready) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sets));
   }, [sets, ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    document.documentElement.dataset.theme = theme;
+    try {
+      window.localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      // The selected theme still applies for this visit.
+    }
+  }, [theme, ready]);
 
   useEffect(() => {
     if (!session || session.mode !== "pomodoro" || !session.running) return;
@@ -526,6 +576,10 @@ export function StudyLab() {
     setView("library");
   }
 
+  function toggleTheme() {
+    setTheme((current) => (current === "light" ? "dark" : "light"));
+  }
+
   if (!ready) {
     return <main className="loading-screen"><Brain size={24} /><span>Loading study sets…</span></main>;
   }
@@ -551,6 +605,7 @@ export function StudyLab() {
                 {session.running ? <Pause size={17} /> : <Play size={17} />}
               </Button>
             )}
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <Button variant="ghost" onClick={finishSession}>End session</Button>
           </div>
         </header>
@@ -621,6 +676,7 @@ export function StudyLab() {
     const start = sessionStartStats ?? { strong: 0, inconsistent: 0, unfamiliar: 0, unseen: 0 };
     return (
       <main className="summary-screen">
+        <ThemeToggle theme={theme} onToggle={toggleTheme} className="summary-theme-toggle" />
         <div className="summary-card">
           <span className="summary-icon"><BarChart3 size={24} /></span>
           <span className="session-kicker">Session complete</span>
@@ -668,10 +724,12 @@ export function StudyLab() {
             <p>{view === "import" ? "Import" : "Study set"}</p>
             <h1>{view === "import" ? "Create a study set" : activeSet?.name ?? "Choose a set"}</h1>
           </div>
-          {view === "import" && sets.length > 0 ? (
-            <Button variant="ghost" onClick={() => setView("library")}><ArrowLeft size={16} /> Cancel</Button>
-          ) : activeSet ? (
-            <div className="set-actions">
+          <div className="workspace-header-tools">
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
+            {view === "import" && sets.length > 0 ? (
+              <Button variant="ghost" onClick={() => setView("library")}><ArrowLeft size={16} /> Cancel</Button>
+            ) : activeSet ? (
+              <div className="set-actions">
               <Dialog open={addCardsOpen} onOpenChange={setAddCardsOpen}>
                 <DialogTrigger asChild>
                   <Button><Plus size={15} /> Add cards</Button>
@@ -771,8 +829,9 @@ export function StudyLab() {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
-            </div>
-          ) : null}
+              </div>
+            ) : null}
+          </div>
         </header>
 
         {view === "import" ? (
