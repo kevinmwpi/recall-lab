@@ -89,6 +89,7 @@ type Session = {
   phase: "focus" | "break";
   secondsLeft: number;
   running: boolean;
+  focusComplete: boolean;
   orderMode: StudyOrder;
   cardIds: string[];
   index: number;
@@ -200,17 +201,18 @@ function FamiliarityPill({ score }: { score: number | null }) {
 function TimerRing({ session, compact = false }: { session: Session; compact?: boolean }) {
   const total = session.phase === "focus" ? session.focusSeconds : session.breakSeconds;
   const remaining = total ? session.secondsLeft / total : 0;
+  const intervalComplete = session.phase === "focus" && session.focusComplete;
   return (
     <div
-      className={`quiet-timer ${compact ? "compact" : ""} ${session.phase}`}
+      className={`quiet-timer ${compact ? "compact" : ""} ${session.phase} ${intervalComplete ? "complete" : ""}`}
       style={{ "--remaining": `${Math.max(0, remaining) * 360}deg` } as React.CSSProperties}
       role="progressbar"
-      aria-label={`${Math.round(remaining * 100)} percent of ${session.phase} interval remaining`}
+      aria-label={intervalComplete ? "Focus interval complete" : `${Math.round(remaining * 100)} percent of ${session.phase} interval remaining`}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(remaining * 100)}
     >
-      <span>{session.phase === "focus" ? <Target size={compact ? 13 : 20} /> : <Coffee size={compact ? 13 : 20} />}</span>
+      <span>{intervalComplete ? <Check size={compact ? 13 : 20} /> : session.phase === "focus" ? <Target size={compact ? 13 : 20} /> : <Coffee size={compact ? 13 : 20} />}</span>
     </div>
   );
 }
@@ -322,9 +324,9 @@ export function StudyLab() {
         if (current.phase === "focus") {
           return {
             ...current,
-            phase: "break",
-            secondsLeft: current.breakSeconds,
-            running: true,
+            secondsLeft: 0,
+            running: false,
+            focusComplete: true,
           };
         }
         setRevealed(false);
@@ -335,6 +337,7 @@ export function StudyLab() {
           phase: "focus",
           secondsLeft: current.focusSeconds,
           running: true,
+          focusComplete: false,
           blockReviews: 0,
           cycle: current.cycle + 1,
         };
@@ -472,6 +475,7 @@ export function StudyLab() {
       phase: "focus",
       secondsLeft: mode === "free" ? 0 : preset[0] * 60,
       running: mode === "pomodoro",
+      focusComplete: false,
       orderMode: studyOrder,
       cardIds: arrangeCardIds(activeSet.cards.map((card) => card.id), studyOrder),
       index: 0,
@@ -527,12 +531,20 @@ export function StudyLab() {
       const nextIndex = current.index + 1;
       const finishedPass = nextIndex >= current.cardIds.length;
       const sourceIds = sessionSet?.cards.map((card) => card.id) ?? current.cardIds;
-      return {
+      const nextSession = {
         ...current,
         cardIds: finishedPass ? arrangeCardIds(sourceIds, current.orderMode) : current.cardIds,
         index: finishedPass ? 0 : nextIndex,
         totalReviews: current.totalReviews + 1,
         blockReviews: current.blockReviews + 1,
+      };
+      if (!current.focusComplete) return nextSession;
+      return {
+        ...nextSession,
+        phase: "break",
+        secondsLeft: current.breakSeconds,
+        running: true,
+        focusComplete: false,
       };
     });
     setRevealed(false);
@@ -559,6 +571,7 @@ export function StudyLab() {
             blockReviews: 0,
             cycle: current.cycle + 1,
             running: true,
+            focusComplete: false,
           }
         : current,
     );
@@ -600,7 +613,7 @@ export function StudyLab() {
           <div className="session-status">
             <span>{session.totalReviews} reviewed</span>
             {session.mode === "pomodoro" && <TimerRing session={session} compact />}
-            {session.mode === "pomodoro" && (
+            {session.mode === "pomodoro" && !session.focusComplete && (
               <Button variant="ghost" size="icon" onClick={toggleTimer} aria-label={session.running ? "Pause focus timer" : "Resume focus timer"}>
                 {session.running ? <Pause size={17} /> : <Play size={17} />}
               </Button>
@@ -621,7 +634,7 @@ export function StudyLab() {
               <Button variant="outline" onClick={finishSession}>Finish session</Button>
             </div>
           </section>
-        ) : !session.running && session.mode === "pomodoro" ? (
+        ) : !session.running && session.mode === "pomodoro" && !session.focusComplete ? (
           <section className="paused-screen">
             <CirclePause size={42} />
             <span className="session-kicker">Focus paused</span>
@@ -630,6 +643,15 @@ export function StudyLab() {
           </section>
         ) : currentCard ? (
           <section className="card-stage">
+            {session.focusComplete && (
+              <div className="focus-complete-signal" role="status" aria-live="polite">
+                <Clock3 size={18} />
+                <div>
+                  <strong>Focus time is up.</strong>
+                  <span>Finish and rate this card, then your break begins.</span>
+                </div>
+              </div>
+            )}
             <div className="card-stage-meta">
               <span>Card {(session.index % session.cardIds.length) + 1} of {session.cardIds.length}</span>
               <FamiliarityPill score={currentCard.score} />
