@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   BarChart3,
@@ -26,6 +26,7 @@ import {
   Sun,
   Target,
   Trash2,
+  Undo2,
   X,
 } from "lucide-react";
 import {
@@ -60,24 +61,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  LIBRARY_KEY, MAX_UNDO_EDITS, loadLibrary, saveLibrary, recordEdit, undoLastEdit,
+  type StudyCard, type StudySet, type StudyLibrary, type UndoEdit,
+} from "./study-library";
 
 type Familiarity = "unseen" | "unfamiliar" | "inconsistent" | "strong";
-
-type StudyCard = {
-  id: string;
-  front: string;
-  back: string;
-  score: number | null;
-  attempts: number;
-  lastReviewed?: number;
-};
-
-type StudySet = {
-  id: string;
-  name: string;
-  cards: StudyCard[];
-  createdAt: number;
-};
 
 type StudyOrder = "ordered" | "shuffled" | "blocks";
 
@@ -101,7 +90,6 @@ type Session = {
 type RecallRating = "missed" | "shaky" | "known";
 type ThemeMode = "light" | "dark";
 
-const STORAGE_KEY = "recall-lab-study-sets-v2";
 const THEME_KEY = "recall-lab-theme-v1";
 const STRONG_THRESHOLD = 75;
 const INCONSISTENT_THRESHOLD = 40;
@@ -243,7 +231,14 @@ function ThemeToggle({
 }
 
 export function StudyLab() {
-  const [sets, setSets] = useState<StudySet[]>([]);
+  const [library, setLibrary] = useState<StudyLibrary>({ sets: [], history: [] });
+  const libraryRef = useRef(library);
+  const savedLibraryRef = useRef<string | null>(null);
+  const storageLoaded = useRef(false);
+  const [storageError, setStorageError] = useState("");
+  const [undoFeedback, setUndoFeedback] = useState("");
+  const { sets, history } = library;
+  const lastEdit = history.at(-1);
   const [activeSetId, setActiveSetId] = useState<string | null>(null);
   const [view, setView] = useState<"library" | "import" | "session" | "summary">("library");
   const [ready, setReady] = useState(false);
@@ -283,27 +278,20 @@ export function StudyLab() {
     setTheme(initialTheme);
 
     try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as StudySet[];
-        if (Array.isArray(parsed)) {
-          setSets(parsed);
-          setActiveSetId(parsed[0]?.id ?? null);
-          setView(parsed.length ? "library" : "import");
-        }
-      } else {
-        setView("import");
-      }
+      const restored = loadLibrary(window.localStorage);
+      libraryRef.current = restored;
+      savedLibraryRef.current = window.localStorage.getItem(LIBRARY_KEY);
+      storageLoaded.current = true;
+      setLibrary(restored);
+      setActiveSetId(restored.sets[0]?.id ?? null);
+      setView(restored.sets.length ? "library" : "import");
     } catch {
+      setStorageError("Your saved library could not be loaded. Nothing has been overwritten. Reload this page to try again.");
       setView("import");
     } finally {
       setReady(true);
     }
   }, []);
-
-  useEffect(() => {
-    if (ready) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sets));
-  }, [sets, ready]);
 
   useEffect(() => {
     if (!ready) return;
@@ -373,6 +361,45 @@ export function StudyLab() {
   const currentCardId = session?.cardIds[session.index % Math.max(1, session.cardIds.length)];
   const currentCard = sessionSet?.cards.find((card) => card.id === currentCardId);
 
+  function commitLibrary(next: StudyLibrary) {
+    if (!storageLoaded.current) return false;
+    try {
+      if (window.localStorage.getItem(LIBRARY_KEY) !== savedLibraryRef.current) {
+        setStorageError("Your library changed in another tab. Reload this page before making more changes. This action was not applied.");
+        return false;
+      }
+      saveLibrary(window.localStorage, next);
+      savedLibraryRef.current = JSON.stringify(next);
+      libraryRef.current = next;
+      setLibrary(next);
+      setStorageError("");
+      return true;
+    } catch {
+      setStorageError("This change could not be saved, so it was not applied. Your cards and undo history are unchanged. Check your browser’s storage settings and try again.");
+      return false;
+    }
+  }
+
+  function commitEdit(nextSets: StudySet[], edit: UndoEdit) {
+    if (!commitLibrary(recordEdit(libraryRef.current, nextSets, edit))) return false;
+    setUndoFeedback("");
+    return true;
+  }
+
+  function undoLastChange() {
+    const current = libraryRef.current;
+    const edit = current.history.at(-1);
+    if (!edit) return;
+    const restored = undoLastEdit(current);
+    if (!commitLibrary(restored)) return;
+    const targetId = restored.sets.find((set) => set.id === edit.setId)?.id
+      ?? restored.sets.find((set) => set.id === activeSetId)?.id
+      ?? restored.sets[0]?.id ?? null;
+    setActiveSetId(targetId);
+    setView(restored.sets.length ? "library" : "import");
+    setUndoFeedback(`Undone: ${edit.label}`);
+  }
+
   function openSet(id: string) {
     setActiveSetId(id);
     setView("library");
@@ -392,7 +419,9 @@ export function StudyLab() {
         attempts: 0,
       })),
     };
-    setSets((current) => [...current, newSet]);
+    if (!commitEdit([...libraryRef.current.sets, newSet], {
+      id: makeId(), kind: "remove-set", setId: newSet.id, label: `Imported “${newSet.name}”`,
+    })) return;
     setActiveSetId(newSet.id);
     setSetName("");
     setRawCards("");
@@ -405,8 +434,7 @@ export function StudyLab() {
 
   function resetActiveSetProgress() {
     if (!activeSet) return;
-    setSets((current) =>
-      current.map((set) =>
+    const nextSets = libraryRef.current.sets.map((set) =>
         set.id !== activeSet.id
           ? set
           : {
@@ -418,14 +446,22 @@ export function StudyLab() {
                 lastReviewed: undefined,
               })),
             },
-      ),
-    );
+      );
+    commitEdit(nextSets, {
+      id: makeId(), kind: "restore-progress", setId: activeSet.id,
+      label: `Reset progress in “${activeSet.name}”`,
+      progress: activeSet.cards.map(({ id, score, attempts, lastReviewed }) => ({ id, score, attempts, lastReviewed })),
+    });
   }
 
   function deleteActiveSet() {
     if (!activeSet) return;
-    const remainingSets = sets.filter((set) => set.id !== activeSet.id);
-    setSets(remainingSets);
+    const remainingSets = libraryRef.current.sets.filter((set) => set.id !== activeSet.id);
+    if (!commitEdit(remainingSets, {
+      id: makeId(), kind: "restore-set", setId: activeSet.id, set: activeSet,
+      index: libraryRef.current.sets.findIndex((set) => set.id === activeSet.id),
+      label: `Deleted “${activeSet.name}” (${activeSet.cards.length} cards)`,
+    })) return;
     setActiveSetId(remainingSets[0]?.id ?? null);
     setView(remainingSets.length ? "library" : "import");
   }
@@ -439,11 +475,13 @@ export function StudyLab() {
       score: null,
       attempts: 0,
     }));
-    setSets((current) =>
-      current.map((set) =>
+    const nextSets = libraryRef.current.sets.map((set) =>
         set.id === activeSet.id ? { ...set, cards: [...set.cards, ...addedCards] } : set,
-      ),
     );
+    if (!commitEdit(nextSets, {
+      id: makeId(), kind: "remove-cards", setId: activeSet.id, cardIds: addedCards.map((card) => card.id),
+      label: `Added ${addedCards.length} card${addedCards.length === 1 ? "" : "s"} to “${activeSet.name}”`,
+    })) return;
     setAdditionalRawCards("");
     setAdditionalTermMode("tab");
     setAdditionalCardMode("newline");
@@ -454,13 +492,18 @@ export function StudyLab() {
 
   function removeCardFromActiveSet(cardId: string) {
     if (!activeSet) return;
-    setSets((current) =>
-      current.map((set) =>
+    const cardIndex = activeSet.cards.findIndex((card) => card.id === cardId);
+    if (cardIndex < 0) return;
+    const card = activeSet.cards[cardIndex];
+    const nextSets = libraryRef.current.sets.map((set) =>
         set.id === activeSet.id
           ? { ...set, cards: set.cards.filter((card) => card.id !== cardId) }
           : set,
-      ),
     );
+    commitEdit(nextSets, {
+      id: makeId(), kind: "restore-card", setId: activeSet.id, card, index: cardIndex,
+      label: `Removed “${card.front}” from “${activeSet.name}”`,
+    });
   }
 
   function startStudy() {
@@ -507,8 +550,7 @@ export function StudyLab() {
     else if (recallMs <= 6_000) result = 100;
     else result = 68;
 
-    setSets((currentSets) =>
-      currentSets.map((set) =>
+    const nextSets = libraryRef.current.sets.map((set) =>
         set.id !== session.setId
           ? set
           : {
@@ -524,8 +566,8 @@ export function StudyLab() {
                     },
               ),
             },
-      ),
     );
+    if (!commitLibrary({ ...libraryRef.current, sets: nextSets })) return;
     setSession((current) => {
       if (!current) return current;
       const nextIndex = current.index + 1;
@@ -623,6 +665,7 @@ export function StudyLab() {
           </div>
         </header>
 
+        {storageError && <div className="storage-error session-storage-error" role="alert">{storageError}</div>}
         {session.phase === "break" ? (
           <section className="break-screen">
             <TimerRing session={session} />
@@ -760,7 +803,7 @@ export function StudyLab() {
                   <DialogHeader>
                     <DialogTitle>Add formatted cards to {activeSet.name}</DialogTitle>
                     <DialogDescription>
-                      Paste multiple notes at once. Choose how each term, definition, and card is separated before adding them to this set.
+                      These cards will be added to the existing set “{activeSet.name}”, not a new deck. You can undo the entire batch afterward.
                     </DialogDescription>
                   </DialogHeader>
 
@@ -804,6 +847,7 @@ export function StudyLab() {
                   </div>
 
                   <DialogFooter>
+                    {storageError && <p className="storage-error" role="alert">{storageError}</p>}
                     <Button variant="outline" onClick={() => setAddCardsOpen(false)}>Cancel</Button>
                     <Button onClick={addCardsToActiveSet} disabled={!parsedAddition.cards.length}>
                       <Plus size={16} /> Add {parsedAddition.cards.length || ""} card{parsedAddition.cards.length === 1 ? "" : "s"}
@@ -823,7 +867,7 @@ export function StudyLab() {
                     <AlertDialogMedia><RefreshCcw /></AlertDialogMedia>
                     <AlertDialogTitle>Reset progress for {activeSet.name}?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      The cards will stay in this set, but every familiarity score and attempt count will return to unseen. This cannot be undone.
+                      The cards will stay in this set, but every familiarity score and attempt count will return to unseen. Undo can restore the progress saved before this reset.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -842,7 +886,7 @@ export function StudyLab() {
                     <AlertDialogMedia className="delete-dialog-icon"><Trash2 /></AlertDialogMedia>
                     <AlertDialogTitle>Delete {activeSet.name}?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This removes all {activeSet.cards.length} cards and their learning history from this browser. The set cannot be recovered.
+                      This removes all {activeSet.cards.length} cards from your study sets. Undo can restore this set and its learning progress while this deletion is within your last {MAX_UNDO_EDITS} edits.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -855,6 +899,21 @@ export function StudyLab() {
             ) : null}
           </div>
         </header>
+
+        {storageError && <div className="storage-error" role="alert">{storageError}</div>}
+        <section className="undo-toolbar" aria-label="Recent edit recovery">
+          <div>
+            <span className="undo-heading">Recent edits</span>
+            <p className="undo-last-edit">{lastEdit ? lastEdit.label : "No edits to undo yet."}</p>
+            <small>Undo the last {MAX_UNDO_EDITS} imports, additions, deletions, or resets, newest first. Saved in this browser, even after a refresh.</small>
+            {lastEdit?.kind === "restore-progress" && <small>Undoing this reset restores scores from before the reset, replacing any later scores in this set.</small>}
+          </div>
+          <Button variant="outline" onClick={undoLastChange} disabled={!lastEdit}
+            aria-label={lastEdit ? `Undo last change: ${lastEdit.label}` : "No recent edits to undo"}>
+            <Undo2 size={16} /> Undo last change{history.length > 0 ? ` (${history.length})` : ""}
+          </Button>
+        </section>
+        <p className="undo-feedback" role="status" aria-live="polite">{undoFeedback}</p>
 
         {view === "import" ? (
           <div className="import-workspace">
@@ -978,26 +1037,12 @@ export function StudyLab() {
                     <div><strong>{card.front}</strong><p>{card.back}</p></div>
                     <FamiliarityPill score={card.score} />
                     <span className="attempt-count">{card.attempts}</span>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="card-delete-button" aria-label={`Remove ${card.front} from this set`}>
-                          <Trash2 size={15} />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogMedia className="delete-dialog-icon"><Trash2 /></AlertDialogMedia>
-                          <AlertDialogTitle>Remove this card?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            “{card.front}” and its learning history will be permanently removed from {activeSet.name}. The rest of the set will stay unchanged.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Keep card</AlertDialogCancel>
-                          <AlertDialogAction variant="destructive" onClick={() => removeCardFromActiveSet(card.id)}>Remove card</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <Button variant="ghost" size="icon" className="card-delete-button"
+                      aria-label={`Remove ${card.front} from this set`}
+                      title="Remove card — undo is available"
+                      onClick={() => removeCardFromActiveSet(card.id)}>
+                      <Trash2 size={15} />
+                    </Button>
                   </div>
                 )) : (
                   <div className="empty-card-list">
